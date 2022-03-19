@@ -1,0 +1,45 @@
+<!doctype html>
+<title>Vip Spider Admin</title>
+<div style="display: flex; flex-direction: column; justify-content: center">
+    <div style="display: flex; justify-content: center">
+        <form id="keyword-form" method="post">
+            <label for="keyword">关键词:</label>
+            <input id="keyword" name="keyword" required style="width: 120px">
+            <label for="brand">品牌:</label>
+            <input id="brand" name="brand" required style="width: 80px">
+            <input type="submit" formaction="/addKeyword" value="提交">
+        </form>
+    </div>
+    <div style="display: flex; justify-content: center">
+        <ul style="list-style:none; padding: 0 16px 0 16px">
+            <li style="font-size: 18px; text-align: center">
+               关键词
+            </li>
+            {% for id, keyword, brand_code in keyword_pairs %}
+                <li>
+                    <span>{{keyword}}</span>
+                </li>
+            {% endfor %}
+        </ul>
+        <ul style="list-style:none; padding: 0 16px 0 16px">
+            <li style="font-size: 18px; text-align: center">
+                品牌code
+            </li>
+            {% for id, keyword, brand_code in keyword_pairs %}
+                <li>
+                    <span>{{brand_code}}</span>
+                </li>
+            {% endfor %}
+        </ul>
+        <ul style="list-style:none; padding: 0 16px 0 16px">
+            <li style="font-size: 18px; text-align: center">
+                操作
+            </li>
+            {% for id, keyword, brand_code in keyword_pairs %}
+                <li>
+                    <span><a href="/delKeyword?id={{id}}">删除</a></span>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
