@@ -5,6 +5,7 @@ import queue
 import threading
 import sqlite3
 from datetime import datetime
+from math import ceil
 
 import requests
 import yagmail
@@ -13,13 +14,14 @@ import yagmail
 # 商品id爬虫线程数
 PID_SPIDER_THREAD_NUM = 10
 # 商品爬虫线程数
-PRODUCT_SPIDER_THREAD_NUM = 10
+PRODUCT_SPIDER_THREAD_NUM = 3
 # 关键词队列
 KEYWORD_QUEUE = queue.Queue()
 # 商品id队列
 PID_QUEUE = queue.Queue()
 # item队列
 ITEM_QUEUE = queue.Queue()
+RECEIVERS = ['372529797@qq.com']
 # 日志设置
 logging.basicConfig(level='INFO', format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s:\n%(message)s')
 
@@ -45,6 +47,11 @@ def gen_random_api_key() -> str:
     return api_key
 
 
+def gen_mars_cid():
+    # return '1647710806882_47b28aad3c45494f56c8143933cf180b'
+    return str(int(datetime.now().timestamp() * 1000)) + '_' + hashlib.md5(str(random.random).encode()).hexdigest()
+
+
 def load_keyword_and_brand():
     conn = sqlite3.connect('vipSpider.db')
     cursor = conn.cursor()
@@ -67,10 +74,17 @@ def vip_keyword_spider(pid):
             logging.info(f'[PID-{pid}] 关键词队列已空, 爬虫退出')
             break
         page_offset = 0
+        app_key = gen_random_api_key()
+        mars_cid = gen_mars_cid()
         while 1:
-            url = f'https://mapi.vip.com/vips-mobile/rest/shopping/pc/search/product/rank?app_name=shop_pc&app_version=4.0&warehouse=VIP_SH&fdc_area_id=103102111&client=pc&mobile_platform=1&province_id=103102&api_key={gen_random_api_key()}&mars_cid=1647519945895_0eb566b2dba9d095fbf844e26ee77f26&wap_consumer=a&standby_id=nature&keyword={p[0]}&brandStoreSns={p[1]}&sort=0&pageOffset={page_offset}&channelId=1&gPlatform=PC&batchSize=50'
+            url = f'https://mapi.vip.com/vips-mobile/rest/shopping/pc/search/product/rank?app_name=shop_pc&app_version=4.0&warehouse=VIP_SH&fdc_area_id=103102111&client=pc&mobile_platform=1&province_id=103102&api_key={app_key}&mars_cid={mars_cid}&wap_consumer=a&standby_id=nature&keyword={p[0]}&brandStoreSns={p[1]}&sort=0&pageOffset={page_offset}&channelId=1&gPlatform=PC&batchSize=50'
             resp = session.get(url)
-            json = resp.json()
+            if resp.status_code == 200:
+                json = resp.json()
+            else:
+                KEYWORD_QUEUE.put(p)
+                logging.error(f'关键词：{p} 未能完整爬取，重新加入队列')
+                break
             try:
                 product_ids = [item['pid'] for item in json['data']['products']]
             except KeyError:
@@ -117,6 +131,7 @@ def vip_saver():
     conn = sqlite3.connect('vipSpider.db')
     cursor = conn.cursor()
     content = []
+    seq = 0
     while 1:
         try:
             item = ITEM_QUEUE.get(timeout=5)
@@ -133,7 +148,8 @@ def vip_saver():
             logging.info('新增: ' + str(item))
             cursor.execute(sql)
             conn.commit()
-            p = f'新品：[{item.brand_show_name}] <a href={item.url}>{item.title}</a> 售价：{item.sale_price} 原价：{item.market_price}'
+            p = f'{seq + 1}. [{item.brand_show_name}] <a href={item.url}>{item.title}</a> 售价：{item.sale_price} 原价：{item.market_price}'
+            seq += 1
             content.append(p)
         else:
             logging.debug('商品已存在')
@@ -156,7 +172,12 @@ def send_mail(content):
         port='465',
         password='UZOVRUQJZSXJKKIW'
     )
-    yag.send(to=['372529797@qq.com'], subject=f'唯品会上新提醒 {datetime.now()}', contents=content)
+    if len(content) <= 500:
+        yag.send(to=RECEIVERS, subject=f'唯品会上新提醒 {datetime.now()}', contents=content)
+    else:
+        p_num = ceil(len(content) / 500)
+        for p in range(p_num):
+            yag.send(to=RECEIVERS, subject=f'唯品会上新提醒 [{p + 1}/{p_num}] {datetime.now()}', contents=content[p * 500:(p + 1) * 500])
 
 
 if __name__ == '__main__':
