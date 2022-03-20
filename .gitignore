@@ -4,4 +4,4 @@ venv/
 vipSpider.db
 logs
 *.log
-.sh
+*.sh
