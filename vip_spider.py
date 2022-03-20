@@ -21,7 +21,7 @@ KEYWORD_QUEUE = queue.Queue()
 PID_QUEUE = queue.Queue()
 # item队列
 ITEM_QUEUE = queue.Queue()
-RECEIVERS = ['372529797@qq.com']
+RECEIVERS = ['372529797@qq.com', '1351696477@qq.com']
 # 日志设置
 logging.basicConfig(level='INFO', format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s:\n%(message)s')
 
