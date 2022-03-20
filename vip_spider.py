@@ -12,9 +12,9 @@ import yagmail
 
 
 # 商品id爬虫线程数
-PID_SPIDER_THREAD_NUM = 10
+PID_SPIDER_THREAD_NUM = 5
 # 商品爬虫线程数
-PRODUCT_SPIDER_THREAD_NUM = 3
+PRODUCT_SPIDER_THREAD_NUM = 5
 # 关键词队列
 KEYWORD_QUEUE = queue.Queue()
 # 商品id队列
@@ -90,7 +90,8 @@ def vip_keyword_spider(pid):
             except KeyError:
                 continue
             pid_url = f'https://mapi.vip.com/vips-mobile/rest/shopping/pc/product/module/list/v2?app_name=shop_pc&app_version=4.0&warehouse=VIP_SH&api_key={gen_random_api_key()}&productIds={"%2C".join(product_ids)}&scene=search&standby_id=nature'
-            PID_QUEUE.put(pid_url)
+            url_item = (p[0], pid_url)
+            PID_QUEUE.put(url_item)
             is_last = json['data']['isLast']
             if is_last:
                 logging.info(f'[PID-{pid}] {p} 爬取完毕')
@@ -106,25 +107,28 @@ def vip_prod_spider(pid):
     }
     while 1:
         try:
-            url = PID_QUEUE.get(timeout=5)
+            url_item = PID_QUEUE.get(timeout=5)
         except queue.Empty:
             logging.info(f'[PID-{pid}] pid队列已空, 爬虫退出')
             break
+        keyword = url_item[0]
+        url = url_item[1]
         resp = session.get(url)
         products = resp.json()['data']['products']
         for prod in products:
-            item = Product()
-            item.product_id = prod['productId']
-            item.brand_id = prod['brandId']
-            item.brand_sn = prod['brandStoreSn']
-            item.brand_show_name = prod['brandShowName']
-            item.title = prod['title'].replace('"', '').replace('\'', '')
-            item.sale_price = prod['price']['salePrice']
-            item.market_price = prod['price']['marketPrice']
-            item.status = prod['status']
-            item.url = f'https://detail.vip.com/detail-{prod["brandId"]}-{prod["productId"]}.html'
-            logging.debug(item)
-            ITEM_QUEUE.put(item)
+            if keyword in prod['title']:
+                item = Product()
+                item.product_id = prod['productId']
+                item.brand_id = prod['brandId']
+                item.brand_sn = prod['brandStoreSn']
+                item.brand_show_name = prod['brandShowName']
+                item.title = prod['title'].replace('"', '').replace('\'', '')
+                item.sale_price = prod['price']['salePrice']
+                item.market_price = prod['price']['marketPrice']
+                item.status = prod['status']
+                item.url = f'https://detail.vip.com/detail-{prod["brandId"]}-{prod["productId"]}.html'
+                logging.debug(item)
+                ITEM_QUEUE.put(item)
 
 
 def vip_saver():
