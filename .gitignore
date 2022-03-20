@@ -2,3 +2,6 @@ venv/
 .idea
 .venv/
 vipSpider.db
+logs
+*.log
+.sh
