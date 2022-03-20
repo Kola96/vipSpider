@@ -59,7 +59,7 @@ def load_keyword_and_brand():
     keyword_pairs = cursor.fetchall()
     for item in keyword_pairs:
         KEYWORD_QUEUE.put(item)
-        logging.debug(f'({item[0]}, {item[1]}) 进入关键词队列')
+        logging.info(f'({item[0]}, {item[1]}) 进入关键词队列')
 
 
 def vip_keyword_spider(pid):
