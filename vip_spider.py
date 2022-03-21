@@ -14,7 +14,7 @@ import yagmail
 # 商品id爬虫线程数
 PID_SPIDER_THREAD_NUM = 5
 # 商品爬虫线程数
-PRODUCT_SPIDER_THREAD_NUM = 5
+PRODUCT_SPIDER_THREAD_NUM = 20
 # 关键词队列
 KEYWORD_QUEUE = queue.Queue()
 # 商品id队列
@@ -62,6 +62,10 @@ def load_keyword_and_brand():
         logging.info(f'({item[0]}, {item[1]}) 进入关键词队列')
 
 
+def mock_keyword():
+    KEYWORD_QUEUE.put(('COUNT', '10000630'))
+
+
 def vip_keyword_spider(pid):
     session = requests.session()
     session.headers = {
@@ -81,6 +85,9 @@ def vip_keyword_spider(pid):
             resp = session.get(url)
             if resp.status_code == 200:
                 json = resp.json()
+                if json['data']['total'] == 0:
+                    logging.error(f'没有搜索到商品，请检查关键词: {p}')
+                    break
             else:
                 KEYWORD_QUEUE.put(p)
                 logging.error(f'关键词：{p} 未能完整爬取，重新加入队列')
@@ -138,30 +145,38 @@ def vip_saver():
     seq = 0
     while 1:
         try:
-            item = ITEM_QUEUE.get(timeout=5)
+            item = ITEM_QUEUE.get(timeout=1)
         except queue.Empty:
             logging.info(f'item队列已空, saver退出')
             cursor.close()
             conn.close()
             break
-        sql = f'SELECT COUNT(1) FROM vip_product WHERE `prod_id` = {item.product_id}'
+        sql = f'SELECT status FROM vip_product WHERE `prod_id` = {item.product_id}'
         cursor.execute(sql)
-        count = cursor.fetchone()[0]
-        if count <= 0:
+        res = cursor.fetchone()
+        if res is not None:
+            status = res[0]
+        else:
+            status = None
+        if status is None:
             sql = f'''INSERT INTO vip_product (`prod_id`, `title`, `brand_id`, `brand_sn`, `brand_name`, `status`, `url`) VALUES ({item.product_id}, '{item.title}', {item.brand_id}, {item.brand_sn}, '{item.brand_show_name}', '{item.status}', '{item.url}')'''
             logging.info('新增: ' + str(item))
             cursor.execute(sql)
             conn.commit()
-            p = f'{seq + 1}. [{item.brand_show_name}] <a href={item.url}>{item.title}</a> 售价：{item.sale_price} 原价：{item.market_price}'
+            p = f'{seq + 1}. [新品][{item.brand_show_name}] <a href={item.url}>{item.title}</a> 售价：{item.sale_price} 原价：{item.market_price}'
             seq += 1
             content.append(p)
         else:
-            logging.debug('商品已存在')
-            logging.debug(item)
-            # sql = f'''UPDATE vip_product SET `title`='{item.title}', `status`='{item.status}', `url`='{item.url}', `update_time`='{datetime.now()}' WHERE `prod_id` = {item.product_id}'''
-            # logging.info('更新: ' + str(item))
-            # cursor.execute(sql)
-            # conn.commit()
+            if status == '1' and item.status == '0':
+                p = f'{seq + 1}. [重新上架][{item.brand_show_name}] <a href={item.url}>{item.title}</a> 售价：{item.sale_price} 原价：{item.market_price}'
+                logging.info('重新上架: ' + str(item))
+                content.append(p)
+            else:
+                pass
+            update_sql = f'''UPDATE vip_product SET `title`='{item.title}', `status`='{item.status}', `url`='{item.url}', `update_time`='{datetime.now()}' WHERE `prod_id` = {item.product_id}'''
+            logging.debug('更新: ' + str(item))
+            cursor.execute(update_sql)
+            conn.commit()
     if len(content) > 0:
         send_mail(content)
         logging.info('已发送上新提醒邮件')
@@ -186,12 +201,18 @@ def send_mail(content):
 
 if __name__ == '__main__':
     load_keyword_and_brand()
+
+    thread_list = []
     for i in range(PID_SPIDER_THREAD_NUM):
-        threading.Thread(target=vip_keyword_spider, args=(i,)).start()
+        t = threading.Thread(target=vip_keyword_spider, args=(i,))
+        thread_list.append(t)
+        t.start()
         logging.info(f'keywordSpider线程 <{i}> 启动')
 
     for i in range(PRODUCT_SPIDER_THREAD_NUM):
-        threading.Thread(target=vip_prod_spider, args=(i,)).start()
+        t = threading.Thread(target=vip_prod_spider, args=(i,))
+        thread_list.append(t)
+        t.start()
         logging.info(f'pidSpider线程 <{i}> 启动')
 
     threading.Thread(target=vip_saver).start()
